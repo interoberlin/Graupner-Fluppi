@@ -18,10 +18,10 @@
 #define MOSI 17 // our input 
 #define MISO 27  // our output
 
-bool selected = false;
+volatile bool selected = false;
 
-unsigned char buffer[64];
-int length = 0;
+volatile unsigned char buffer[64];
+volatile int length = 0;
 
 void initGPIO()
 {
@@ -38,43 +38,38 @@ void initGPIO()
 void slaveSelect()
 {
     selected = true;
-}
-
-bool disableSlaveUnselectISR = false;
-
-void clockTick()
-{
-    if (selected)
-    {
-        disableSlaveUnselectISR = true;
-        buffer[length] = digitalRead(MOSI);
-        length = (length % 64)+1;
-        disableSlaveUnselectISR = false;
-    }
+    digitalWrite(MISO, HIGH);
 }
 
 void slaveUnselect()
 {
     selected = false;
+    digitalWrite(MISO, LOW);
+}
 
-    if (!disableSlaveUnselectISR)
+void slaveSelectEvent()
+{
+    if (digitalRead(SS) == HIGH)
+        slaveSelect();
+    else
+        slaveUnselect();
+}
+
+void clockTick()
+{
+    if (selected)
     {
-        disableSlaveUnselectISR = true;
-        if (!selected)
-        {
-            digitalWrite(MISO, LOW);
-        } else {
-            digitalWrite(MISO, HIGH);
-        }
-        disableSlaveUnselectISR = false;
+        bool value = digitalRead(MOSI); 
+        buffer[length] = value;
+        length = (length % 64)+1;
+//        digitalWrite(MISO, value);
     }
 }
 
 void attachInterruptHandlers()
 {
-    wiringPiISR(SS, INT_EDGE_FALLING, slaveSelect);
-    wiringPiISR(SS, INT_EDGE_RISING, slaveUnselect);
-    wiringPiISR(SCLK, INT_EDGE_RISING, clockTick);
+    wiringPiISR(SS, INT_EDGE_BOTH, slaveSelectEvent);
+//    wiringPiISR(SCLK, INT_EDGE_RISING, clockTick);
 }
  
 int main()
